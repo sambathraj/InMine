@@ -1,23 +1,24 @@
-#DWAL="dummy"
-#WORKER_NAME=test
-#CUSTOM_TEMPLATE=HaloGenius.%WORKER_NAME%
-#CUSTOM_URL=stratum.nrg.minecrypto.pro:9999
-#CUSTOM_PASS=""
-#CUSTOM_ALGO="energyhash"
-#CUSTOM_CONFIG_FILENAME="config.conf"
+#!/usr/bin/env bash
 
-[[ -z $CUSTOM_TEMPLATE ]] && echo -e "${YELLOW}CUSTOM_TEMPLATE is empty${NOCOLOR}" && return 1
-[[ -z $CUSTOM_URL ]] && echo -e "${YELLOW}CUSTOM_URL is empty${NOCOLOR}" && return 1
+# HiveOS provides these in Custom Miner FS:
+# CUSTOM_URL, CUSTOM_USER, CUSTOM_PASS, CUSTOM_USER_CONFIG, WORKER_NAME
+# Also wallet vars may exist: EWAL / DWAL / ZWAL
 
-conf=" --pool ${CUSTOM_URL} --pooluser ${CUSTOM_TEMPLATE} --poolpass ${CUSTOM_PASS} --apilisten=0.0.0.0  ${CUSTOM_USER_CONFIG}"
+# Where to write generated args for h-run.sh to consume
+: "${CUSTOM_CONFIG_FILENAME:=config.ini}"
 
-#replace tpl values in whole file
-[[ -z $EWAL && -z $ZWAL && -z $DWAL ]] && echo -e "${RED}No WAL address is set${NOCOLOR}"
-[[ ! -z $EWAL ]] && conf=$(sed "s/%EWAL%/$EWAL/g" <<< "$conf") #|| echo "${RED}EWAL not set${NOCOLOR}"
-[[ ! -z $DWAL ]] && conf=$(sed "s/%DWAL%/$DWAL/g" <<< "$conf") #|| echo "${RED}DWAL not set${NOCOLOR}"
-[[ ! -z $ZWAL ]] && conf=$(sed "s/%ZWAL%/$ZWAL/g" <<< "$conf") #|| echo "${RED}ZWAL not set${NOCOLOR}"
-[[ ! -z $EMAIL ]] && conf=$(sed "s/%EMAIL%/$EMAIL/g" <<< "$conf")
-[[ ! -z $WORKER_NAME ]] && conf=$(sed "s/%WORKER_NAME%/$WORKER_NAME/g" <<< "$conf") #|| echo "${RED}WORKER_NAME not set${NOCOLOR}"
+# Build wallet.worker template
+WALLET="${CUSTOM_USER:-${EWAL:-${DWAL:-${ZWAL:-}}}}"
+[[ -z "$WALLET" ]] && echo "No wallet set (CUSTOM_USER/EWAL/DWAL/ZWAL)" && return 1
 
-[[ -z $CUSTOM_CONFIG_FILENAME ]] && echo -e "${RED}No CUSTOM_CONFIG_FILENAME is set${NOCOLOR}" && return 1
-echo "$conf" > $CUSTOM_CONFIG_FILENAME
+WORKER="${WORKER_NAME:-worker}"
+USER_TPL="${WALLET}.${WORKER}"
+
+[[ -z "$CUSTOM_URL" ]] && echo "CUSTOM_URL is empty (set Pool URL in Flight Sheet)" && return 1
+PASS="${CUSTOM_PASS:-x}"
+
+# Build miner args (written as a single line)
+# NOTE: adjust flags here if iniminer uses different CLI.
+conf="-o ${CUSTOM_URL} -u ${USER_TPL} -p ${PASS} ${CUSTOM_USER_CONFIG} --cuda --retry-delay 5 --farm-retries 99"
+
+echo "${conf}" > "${CUSTOM_CONFIG_FILENAME}"
