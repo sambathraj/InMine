@@ -1,35 +1,40 @@
 #!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")"
 . ./h-manifest.conf
 
-# Flight Sheet (Custom Miner) provides these:
-# CUSTOM_URL          -> pool host:port (recommended) OR full stratum url
-# CUSTOM_USER         -> your wallet (0x...)
-# CUSTOM_PASS         -> optional (not used by iniminer in your working cmd, but we keep it for compatibility)
-# CUSTOM_USER_CONFIG  -> extra args
-# WORKER_NAME         -> rig worker name
+# Prefer Flight Sheet environment variables.
+# If HiveOS didn't export them into the process env, fall back to sourcing /hive-config/*.conf.
+need_fallback=0
+[[ -z "$CUSTOM_TEMPLATE" ]] && need_fallback=1
+[[ -z "$CUSTOM_URL" ]] && need_fallback=1
+# CUSTOM_USER_CONFIG can be empty legitimately, so don't require it.
 
-WALLET="${CUSTOM_USER}"
-WORKER="${WORKER_NAME:-Worker001}"
-
-[[ -z "$WALLET" ]] && echo "ERROR: CUSTOM_USER (wallet) is empty" && exit 1
-[[ -z "$CUSTOM_URL" ]] && echo "ERROR: CUSTOM_URL (pool) is empty" && exit 1
-
-# Allow CUSTOM_URL to be either:
-#  - pool-a.yatespool.com:31556
-#  - stratum+tcp://pool-a.yatespool.com:31556
-#  - stratum+tcp://WALLET.WORKER@pool-a.yatespool.com:31556  (if user already included it)
-URL="$CUSTOM_URL"
-URL="${URL#stratum+tcp://}"
-
-# If user already included "@", assume it already has wallet.worker@
-if [[ "$URL" == *@* ]]; then
-  POOL="stratum+tcp://$URL"
-else
-  POOL="stratum+tcp://${WALLET}.${WORKER}@${URL}"
+if [[ $need_fallback -eq 1 ]]; then
+  for f in /hive-config/*.conf; do
+    # Only source files that look like the custom miner config
+    if grep -q '^CUSTOM_MINER=' "$f" 2>/dev/null; then
+      # shellcheck disable=SC1090
+      . "$f"
+    fi
+  done
 fi
 
-EXTRA="${CUSTOM_USER_CONFIG}"
+# Validate required vars (after fallback)
+[[ -z "$CUSTOM_TEMPLATE" ]] && echo "ERROR: wallet is empty (CUSTOM_TEMPLATE)" && exit 1
+[[ -z "$CUSTOM_URL" ]] && echo "ERROR: pool is empty (CUSTOM_URL)" && exit 1
 
-conf="--pool ${POOL} --cuda --retry-delay 5 --farm-retries 99 ${EXTRA}"
+WORKER="${WORKER_NAME:-worker001}"
+
+# CUSTOM_URL should be host:port (recommended). If it already includes stratum prefix, strip it.
+URL="${CUSTOM_URL#stratum+tcp://}"
+
+# Pool requires: stratum+tcp://wallet.worker@host:port
+POOL="stratum+tcp://${CUSTOM_TEMPLATE}@${URL}"
+
+EXTRA="${CUSTOM_USER_CONFIG:-}"
+
+conf="--pool ${POOL} ${EXTRA}"
 
 echo "$conf" > "${CUSTOM_CONFIG_FILENAME}"

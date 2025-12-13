@@ -3,7 +3,7 @@
 
 khs=0
 
-pid=$(pidof iniminer-cuda-linux-x64 | awk '{print $1}')
+pid=$(pidof iniminer-cuda | awk '{print $1}')
 uptime=0
 if [[ -n "$pid" ]]; then
   uptime=$(ps -o etimes= -p "$pid" 2>/dev/null | tr -d ' ')
